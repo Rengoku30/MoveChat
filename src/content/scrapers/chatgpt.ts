@@ -103,6 +103,16 @@ export const scrapeChatGPT = async (
   // Primary: use stable data-message-author-role attribute
   let messageContainers: Element[] = Array.from(document.querySelectorAll('[data-message-author-role]'));
   if (messageContainers.length === 0) {
+    // Newer ChatGPT UI: <li data-message-role="user|assistant"> inside the transcript list
+    messageContainers = Array.from(document.querySelectorAll('[data-message-role]'));
+  }
+  if (messageContainers.length === 0) {
+    // Logged-in ChatGPT app shell: one unit per message, role at the end of the key ("turn-0:1:assistant")
+    messageContainers = Array.from(document.querySelectorAll(
+      '[data-content-search-unit-key$=":user"], [data-content-search-unit-key$=":assistant"]'
+    ));
+  }
+  if (messageContainers.length === 0) {
     // Fallback: try conversation-turn test IDs
     const turnContainers = document.querySelectorAll('[data-testid^="conversation-turn-"]');
     if (turnContainers.length === 0) {
@@ -135,16 +145,22 @@ export const scrapeChatGPT = async (
 
     // 1. Identify Role
     let role: 'user' | 'assistant' = 'user';
-    const roleAttr = container.getAttribute('data-message-author-role');
+    const roleAttr = container.getAttribute('data-message-author-role') ||
+                     container.getAttribute('data-message-role') ||
+                     container.getAttribute('data-content-search-unit-key')?.split(':').pop();
     if (roleAttr === 'assistant') {
       role = 'assistant';
-    } else if (!roleAttr && container.querySelector('.markdown')) {
+    } else if (!roleAttr && container.querySelector('.markdown, [data-assistant-markdown-root]')) {
       role = 'assistant';
     }
 
     // 2. Extract Text Content using HTML-to-Markdown
-    const contentNode = container.querySelector('.markdown') || 
-                        container.querySelector('.whitespace-pre-wrap') || 
+    const contentNode = container.querySelector('.markdown') ||
+                        container.querySelector('[data-assistant-markdown-root]') ||
+                        container.querySelector('[data-markdown-text-style="assistant-message"]') ||
+                        container.querySelector('[data-markdown-text-tone="user-message"]') ||
+                        container.querySelector('.whitespace-pre-wrap') ||
+                        container.querySelector('[data-user-message-bubble]') ||
                         container;
     
     const text = elementToMarkdown(contentNode);

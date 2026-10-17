@@ -1,3 +1,7 @@
+// Newer ChatGPT renders the code language as a bare <span>python</span> right before the <pre>
+const isCodeLangLabel = (el: Element | null): boolean =>
+  !!el && el.tagName === 'SPAN' && /^[\w+#.-]{1,20}$/.test((el.textContent || '').trim());
+
 export const elementToMarkdown = (element: Element): string => {
   let md = '';
   const children = Array.from(element.childNodes);
@@ -56,7 +60,12 @@ export const elementToMarkdown = (element: Element): string => {
             lang = match[1];
           }
         }
+        if (lang === 'plaintext' && isCodeLangLabel(el.previousElementSibling)) {
+          lang = (el.previousElementSibling!.textContent || '').trim();
+        }
         md += `\n\`\`\`${lang}\n${(codeText || '').trim()}\n\`\`\`\n`;
+      } else if (isCodeLangLabel(el) && el.nextElementSibling?.tagName === 'PRE') {
+        // Language label is emitted as part of the following code fence
       } else if (tag === 'code') {
         // Inline code
         md += ` \`${(el.textContent || '').trim()}\` `;
@@ -83,6 +92,11 @@ export const elementToMarkdown = (element: Element): string => {
         const href = el.getAttribute('href') || '';
         const linkText = elementToMarkdown(el).trim();
         md += href ? ` [${linkText}](${href}) ` : ` ${linkText} `;
+      } else if (el.hasAttribute('data-code-block')) {
+        // Logged-in ChatGPT: no <pre>; header label ("Python", "Plain text") plus code in [data-code-block-source]
+        const label = (el.querySelector('[data-markdown-copy="exclude"]')?.textContent || '').trim().toLowerCase().replace(/\s+/g, '');
+        const codeText = el.querySelector('[data-code-block-source]')?.textContent || '';
+        md += `\n\`\`\`${label || 'plaintext'}\n${codeText.trim()}\n\`\`\`\n`;
       } else if (el.classList.contains('code-block-container') || el.classList.contains('code-block')) {
         // Skip code block headers or wrapper metadata to prevent duplicate rendering
         const codePre = el.querySelector('pre');
@@ -97,10 +111,14 @@ export const elementToMarkdown = (element: Element): string => {
     }
   }
 
-  // Normalize multi-newlines, whitespace, and spaces before punctuation
+  // Normalize multi-newlines, whitespace, and spaces before punctuation,
+  // leaving fenced code blocks (odd split indexes) untouched so indentation survives
   return md
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/ ([\.\,\;\:\?\!])/g, '$1')
+    .split(/(```[\s\S]*?```)/)
+    .map((part, i) => i % 2 ? part : part
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/ ([\.\,\;\:\?\!])/g, '$1'))
+    .join('')
     .trim();
 };

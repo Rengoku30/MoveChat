@@ -110,7 +110,9 @@ export const injectChatGPT = async (pending: PendingHandoff) => {
 
       // 3. Attach file via <input type="file"> if present
       let fileAttached = false;
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement | null;
+      // ChatGPT has several file inputs (camera, photos, files); prefer the unrestricted "Attach files" one
+      const fileInputs = Array.from(document.querySelectorAll('input[type="file"]')) as HTMLInputElement[];
+      const fileInput = fileInputs.find(i => !i.accept) || fileInputs[0] || null;
       if (fileInput) {
         try {
           fileInput.files = dataTransfer.files;
